@@ -18,22 +18,26 @@ let kuroshiro;
   console.log('Kuroshiro ready');
 })();
 
-app.post('/api/romaji', async (req, res) => {
+app.post('/api/furigana', async (req, res) => {
   const { text, to } = req.body;
   if (!kuroshiro) {
     return res.status(503).json({ error: 'Kuroshiro not ready' });
   }
   try {
-    if (to === 'hiragana') {
-      const hira = await kuroshiro.convert(text, { to: 'hiragana', mode: 'spaced' });
-      res.json({ hiragana: hira });
+    // 使用Kuroshiro的tokenize方法获取分词和注音
+    const tokens = await kuroshiro._analyzer.tokenize(text);
+    const result = await Promise.all(tokens.map(async token => {
+      const surface = token.surface_form;
+      // ひらがな
+      const reading = await kuroshiro.convert(surface, { to: 'hiragana', mode: 'normal' });
+      // 罗马字
+      const romaji = await kuroshiro.convert(surface, { to: 'romaji', mode: 'normal', romajiSystem: 'hepburn' });
+      return { surface, reading, romaji };
+    }));
+    if (to === 'romaji') {
+      res.json({ result, display: result.map(t => t.romaji).join(' ') });
     } else {
-      const result = await kuroshiro.convert(text, {
-        to: 'romaji',
-        mode: 'spaced',
-        romajiSystem: 'hepburn'
-      });
-      res.json({ romaji: result });
+      res.json({ result, display: result.map(t => t.reading).join(' ') });
     }
   } catch (e) {
     res.status(500).json({ error: e.message });
